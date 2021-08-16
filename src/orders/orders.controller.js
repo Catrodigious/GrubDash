@@ -4,7 +4,7 @@ const orders = require(path.resolve("src/data/orders-data"));
 const dishes = require(path.resolve("src/data/dishes-data"));
 // Use this function to assigh ID's when necessary
 const nextId = require("../utils/nextId");
-
+// https://www.qualified.io/assess/5fbbdd93332fec0010195cd9/challenges/5fbbdd91f737370012215b2c?invite=PWpxrraJVgO2qA
 // so, I have this thing about oxford commas...
 // If not all params are entered or are entered correctly in the POST method,
 // this function formats which params are missing - if there are three or more items misisng,
@@ -52,20 +52,26 @@ const validatePostInputs = function(req, res, next){
   // had to modify my return message to allow it to pass
   const invalidQuantity = dishes.filter((dish)=>!Object.keys(dish).includes("quantity") || typeof dish.quantity === "string" || dish.quantity < 1);
   if (invalidQuantity.length > 0){
-    console.log("invalidQuantity :", invalidQuantity);
     return next({status: 400, message: `Parameter [quantity] must be an integer greater than 0 and at least 1 - recieved value was '${invalidQuantity[0].quantity}'. Try an int quantity of 2 instead`});
   }
-  res.locals.newOrder = {status: status, ...params};
+  res.locals.newOrUpdatedOrder = {status: status, ...params};
   next();
 }
+
 
 const validateUpdateInputs = function(req, res, next){
   const {
     id,
-    status,
+    status
   } = req.body.data;
   const { orderId } = req.params;
-  if (orderId !== id) next({status: 400, message: "ID of body does not match the ID parameter"})
+  // if status is already delivered, make it unchangable
+  const givenStatus = res.locals.order.status.toLowerCase();
+  if (givenStatus === "delivered" || status === "invalid") next({status: 400, message: `status ${status} is invalid`})
+  // body and param ids should match
+  if (id && orderId !== id) return next({status: 400, message: `id of body (${id}) does not match the id parameter (${orderId})`})
+  if (!status) return next({status: 400, message: "Please include a status in PUT body"});
+  next();
 }
 
 const isIdValid = function(req, res, next){
@@ -73,17 +79,22 @@ const isIdValid = function(req, res, next){
   const match = orders.find((order)=>order.id === orderId);
 
   if (!match)
-      next({status: 404, message: `order does not exist: ${orderId}.`});
-  
+      return next({status: 404, message: `order does not exist: ${orderId}.`});
   res.locals.order = match;
   next();
 }
 
+const verifyStatusBeforeDeletion = function(req, res, next){
+  const order = res.locals.order;
+  if (order.status !== "pending") return next({status: 400, message: `Cannot delete with order status ${order.status}; status must be 'pending'`});
+  next();
+}
+
 function create(req, res){
-  const newOrder = {id: nextId(), ...res.locals.newOrder};
-  if (!newOrder.status) newOrder.status = "out-for-delivery";
-  orders.push(newOrder);
-  res.status(201).json({data: newOrder});
+  const newOrUpdatedOrder = {id: nextId(), ...res.locals.newOrUpdatedOrder};
+  if (!newOrUpdatedOrder.status) newOrUpdatedOrder.status = "out-for-delivery";
+  orders.push(newOrUpdatedOrder);
+  res.status(201).json({data: newOrUpdatedOrder});
 }
 
 function read(req, res){
@@ -91,11 +102,19 @@ function read(req, res){
 }
 
 function update(req, res){
-  res.status(200).json({data: `Call made to ${req.originalUrl}`})
+  const newOrderDetails = res.locals.newOrUpdatedOrder;
+  const existingOrder = orders.find((order)=>order.id === req.params.orderId);
+  const index = orders.indexOf(existingOrder);
+  orders[index] = {...existingOrder, ...newOrderDetails};
+
+  res.status(200).json({data: orders[index]});
 }
 
 function destroy(req, res){
-  res.status(200).json({data: `Call made to ${req.originalUrl}`})
+  const index = orders.indexOf(res.locals.order);
+  orders.splice(index, 1);
+  console.log("destroy call, called");
+  res.status(204).json({data: orders});
 }
 
 function list(req, res){
@@ -104,8 +123,8 @@ function list(req, res){
 
 module.exports = {
   create: [validatePostInputs, create],
-  update,
+  update: [isIdValid, validateUpdateInputs, validatePostInputs, update],
   read: [isIdValid, read],
-  delete: [destroy],
+  delete: [isIdValid, verifyStatusBeforeDeletion, destroy],
   list
 }
