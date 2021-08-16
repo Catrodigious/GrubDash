@@ -40,6 +40,7 @@ function validateBody(req, res, next){
     next();
 }
 
+// handles status and id issues
 function validateUpdateInputs(req, res, next){
     const {
         id,
@@ -55,16 +56,19 @@ function validateUpdateInputs(req, res, next){
     next();
 }
 
+// checks that ids match and populates res.locals.order
 function isIdValid(req, res, next){
     const { orderId = null } = req.params;
     const match = orders.find((order)=>order.id === orderId);
 
     if (!match)
         return next({status: 404, message: `order does not exist: ${orderId}.`});
+
     res.locals.order = match;
     next();
 }
 
+// makes sure that status is set to particular values before deleting
 function verifyStatusBeforeDeletion(req, res, next){
     const order = res.locals.order;
     if (order.status !== "pending") return next({status: 400, message: `Cannot delete with order status ${order.status}; status must be 'pending'`});

@@ -4,7 +4,7 @@ const orders = require(path.resolve("src/data/orders-data"));
 const dishes = require(path.resolve("src/data/dishes-data"));
 // Use this function to assigh ID's when necessary
 const nextId = require("../utils/nextId");
-// https://www.qualified.io/assess/5fbbdd93332fec0010195cd9/challenges/5fbbdd91f737370012215b2c?invite=PWpxrraJVgO2qA
+// Created a separate module for middleware to tidy things up a bit
 const {
   validateBody,
   validateUpdateInputs,
